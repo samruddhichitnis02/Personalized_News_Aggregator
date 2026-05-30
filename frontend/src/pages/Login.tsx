@@ -206,4 +206,33 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
   },
   error: {
-    colo
+    color: '#e05555',
+    fontSize: '0.85rem',
+    padding: '10px 14px',
+    backgroundColor: 'rgba(224, 85, 85, 0.1)',
+    borderRadius: 'var(--radius)',
+    border: '1px solid rgba(224, 85, 85, 0.2)',
+  },
+  button: {
+    backgroundColor: 'var(--accent)',
+    color: '#0a0a0a',
+    padding: '14px',
+    borderRadius: 'var(--radius)',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    letterSpacing: '0.05em',
+    transition: 'var(--transition)',
+    marginTop: '8px',
+  },
+  switchText: {
+    textAlign: 'center',
+    fontSize: '0.85rem',
+    color: 'var(--text-secondary)',
+  },
+  link: {
+    color: 'var(--accent)',
+    fontWeight: 500,
+  },
+};
+
+export default Login;
