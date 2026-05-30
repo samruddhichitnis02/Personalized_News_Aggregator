@@ -4,7 +4,8 @@ from app.db.database import get_db
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token, decode_token
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 # tells FastAPI where to find the token in incoming requests
@@ -48,15 +49,13 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     return {"access_token": token}
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Login existing user.
-    - Finds user by email
-    - Verifies password against hashed version
-    - Returns JWT token on success
+    Accepts both form data (for Swagger) and works with OAuth2.
     """
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token({"sub": str(user.id)})
     return {"access_token": token}
