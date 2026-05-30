@@ -38,9 +38,7 @@ const Bookmarks = () => {
   return (
     <div style={styles.page}>
       <Navbar />
-
       <main style={styles.main}>
-        {/* Header */}
         <div style={styles.pageHeader}>
           <h1 style={styles.pageTitle}>Saved Stories</h1>
           <p style={styles.pageSubtitle}>
@@ -48,7 +46,6 @@ const Bookmarks = () => {
           </p>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div style={styles.list}>
             {[...Array(4)].map((_, i) => (
@@ -64,27 +61,22 @@ const Bookmarks = () => {
           </div>
         )}
 
-        {/* Empty State */}
         {!loading && bookmarks.length === 0 && (
           <div style={styles.empty}>
             <div style={styles.emptyIcon}>☆</div>
             <h3 style={styles.emptyTitle}>No saved stories yet</h3>
             <p style={styles.emptyText}>
-              Bookmark articles from your feed and they'll appear here.
+              Bookmark articles from your feed and they will appear here.
             </p>
           </div>
         )}
 
-        {/* Bookmarks List */}
         {!loading && bookmarks.length > 0 && (
           <div style={styles.list}>
             {bookmarks.map((bookmark, i) => (
               <article
                 key={bookmark.id}
-                style={{
-                  ...styles.row,
-                  animationDelay: `${i * 0.06}s`,
-                }}
+                style={{ ...styles.row, animationDelay: `${i * 0.06}s` }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)';
                 }}
@@ -92,7 +84,6 @@ const Bookmarks = () => {
                   (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-card)';
                 }}
               >
-                {/* Content */}
                 <div style={styles.rowContent}>
                   <div style={styles.rowMeta}>
                     {bookmark.source && (
@@ -100,11 +91,7 @@ const Bookmarks = () => {
                     )}
                   </div>
 
-                  
-                    href={bookmark.article_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={bookmark.article_url} target="_blank" rel="noopener noreferrer">
                     <h2 style={styles.rowTitle}>{bookmark.title}</h2>
                   </a>
 
@@ -113,13 +100,13 @@ const Bookmarks = () => {
                   )}
 
                   <div style={styles.rowFooter}>
-                    
+                    <a
                       href={bookmark.article_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={styles.readLink}
                     >
-                      Read story →
+                      Read story
                     </a>
                     <button
                       onClick={() => handleDelete(bookmark.id)}
@@ -139,7 +126,6 @@ const Bookmarks = () => {
                   </div>
                 </div>
 
-                {/* Thumbnail */}
                 {bookmark.image_url && (
                   <div style={styles.thumb}>
                     <img

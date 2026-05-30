@@ -90,7 +90,6 @@ const Feed = () => {
       <Navbar />
 
       <main style={styles.main}>
-        {/* Page Header */}
         <div style={styles.pageHeader}>
           <h1 style={styles.pageTitle}>Your Feed</h1>
           <p style={styles.pageSubtitle}>
@@ -98,7 +97,6 @@ const Feed = () => {
           </p>
         </div>
 
-        {/* Topic Filter */}
         <div style={styles.topicBar}>
           {topics.map((topic) => (
             <button
@@ -114,7 +112,6 @@ const Feed = () => {
           ))}
         </div>
 
-        {/* Loading State */}
         {loading && (
           <div style={styles.grid}>
             {[...Array(6)].map((_, i) => (
@@ -131,7 +128,6 @@ const Feed = () => {
           </div>
         )}
 
-        {/* Articles Grid */}
         {!loading && (
           <div style={styles.grid}>
             {filtered.map((article, i) => (
@@ -150,7 +146,6 @@ const Feed = () => {
                   (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
                 }}
               >
-                {/* Article Image */}
                 {article.urlToImage && (
                   <div style={styles.imageWrapper}>
                     <img
@@ -165,7 +160,6 @@ const Feed = () => {
                 )}
 
                 <div style={styles.cardContent}>
-                  {/* Meta */}
                   <div style={styles.meta}>
                     <span style={styles.topicTag}>{article.topic}</span>
                     <span style={styles.dot}>·</span>
@@ -174,25 +168,22 @@ const Feed = () => {
                     <span style={styles.date}>{formatDate(article.publishedAt)}</span>
                   </div>
 
-                  {/* Title */}
                   <a href={article.url} target="_blank" rel="noopener noreferrer">
                     <h2 style={styles.title}>{article.title}</h2>
                   </a>
 
-                  {/* Description */}
                   {article.description && (
                     <p style={styles.description}>{article.description}</p>
                   )}
 
-                  {/* Footer */}
                   <div style={styles.cardFooter}>
-                    
+                    <a
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={styles.readMore}
                     >
-                      Read story →
+                      Read story
                     </a>
                     <button
                       onClick={() => toggleBookmark(article)}
