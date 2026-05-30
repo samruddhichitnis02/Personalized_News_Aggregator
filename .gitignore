@@ -10,6 +10,7 @@ build/
 backend/.env
 venv/
 backend/venv/
+database_files/
 
 # Node
 node_modules/
