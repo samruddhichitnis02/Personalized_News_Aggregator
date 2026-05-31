@@ -36,3 +36,7 @@ export const addBookmark = (data: object) => api.post('/bookmarks/', data);
 export const deleteBookmark = (id: number) => api.delete(`/bookmarks/${id}`);
 
 export default api;
+
+// search endpoints
+export const searchNews = (q: string, page: number = 1) =>
+  api.get(`/news/search?q=${encodeURIComponent(q)}&page=${page}`);

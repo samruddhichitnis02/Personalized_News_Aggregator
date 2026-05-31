@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getFeed, addBookmark, getBookmarks, deleteBookmark } from '../services/api';
+import { useState, useEffect, useRef } from 'react';
+import { getFeed, addBookmark, getBookmarks, deleteBookmark, searchNews } from '../services/api';
 import Navbar from '../components/Navbar';
 
 interface Article {
@@ -17,14 +17,24 @@ interface Bookmark {
   article_url: string;
 }
 
+type SearchMode = 'feed' | 'search';
+
 const Feed = () => {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [searchResults, setSearchResults] = useState<Article[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [activeTopic, setActiveTopic] = useState('all');
   const [bookmarking, setBookmarking] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [visibleCount, setVisibleCount] = useState(9);
+  const [mode, setMode] = useState<SearchMode>('feed');
+  const [searchPage, setSearchPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,8 +58,8 @@ const Feed = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // local filter for feed mode
   const topics = ['all', ...Array.from(new Set(articles.map((a) => a.topic)))];
-
   const filtered = articles
     .filter((a) => activeTopic === 'all' || a.topic === activeTopic)
     .filter((a) => {
@@ -61,9 +71,44 @@ const Feed = () => {
         a.source?.toLowerCase().includes(q)
       );
     });
-
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
+
+  // real search handler - calls backend
+  const handleSearch = async (page = 1) => {
+    const q = searchInput.trim();
+    if (!q) return;
+
+    setSearching(true);
+    setMode('search');
+    setSearchQuery(q);
+    setSearchPage(page);
+
+    try {
+      const res = await searchNews(q, page);
+      if (page === 1) {
+        setSearchResults(res.data.articles);
+      } else {
+        // append for pagination
+        setSearchResults((prev) => [...prev, ...res.data.articles]);
+      }
+      setTotalResults(res.data.totalResults);
+    } catch (err) {
+      console.error('Search failed', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setMode('feed');
+    setSearchInput('');
+    setSearch('');
+    setSearchResults([]);
+    setSearchQuery('');
+    setSearchPage(1);
+    setTotalResults(0);
+  };
 
   const isBookmarked = (url: string) =>
     bookmarks.some((b) => b.article_url === url);
@@ -102,6 +147,9 @@ const Feed = () => {
     });
   };
 
+  // articles to display depending on mode
+  const displayArticles = mode === 'search' ? searchResults : visible;
+
   return (
     <div style={styles.page}>
       <Navbar />
@@ -109,56 +157,77 @@ const Feed = () => {
         {/* Header + Search */}
         <div style={styles.pageHeader}>
           <div>
-            <h1 style={styles.pageTitle}>Your Feed</h1>
+            <h1 style={styles.pageTitle}>
+              {mode === 'search' ? `Results for "${searchQuery}"` : 'Your Feed'}
+            </h1>
             <p style={styles.pageSubtitle}>
-              {loading ? 'Loading stories...' : `${filtered.length} stories curated for you`}
+              {mode === 'search'
+                ? `${totalResults.toLocaleString()} articles found`
+                : loading
+                ? 'Loading stories...'
+                : `${filtered.length} stories curated for you`}
             </p>
           </div>
+
           {/* Search Bar */}
           <div style={styles.searchWrapper}>
             <span style={styles.searchIcon}>⌕</span>
             <input
+              ref={searchRef}
               type="text"
-              placeholder="Search stories..."
-              value={search}
+              placeholder="Search any topic..."
+              value={searchInput}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setVisibleCount(9);
+                setSearchInput(e.target.value);
+                // also update local filter when in feed mode
+                if (mode === 'feed') setSearch(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearch(1);
               }}
               style={styles.searchInput}
             />
-            {search && (
+            {/* Search button */}
+            {searchInput && mode === 'feed' && (
               <button
-                onClick={() => setSearch('')}
-                style={styles.clearBtn}
+                onClick={() => handleSearch(1)}
+                style={styles.searchBtn}
               >
-                ✕
+                Search
+              </button>
+            )}
+            {/* Clear button in search mode */}
+            {mode === 'search' && (
+              <button onClick={handleClearSearch} style={styles.clearBtn}>
+                ✕ Back to feed
               </button>
             )}
           </div>
         </div>
 
-        {/* Topic Filter */}
-        <div style={styles.topicBar}>
-          {topics.map((topic) => (
-            <button
-              key={topic}
-              onClick={() => {
-                setActiveTopic(topic);
-                setVisibleCount(9);
-              }}
-              style={{
-                ...styles.topicChip,
-                ...(activeTopic === topic ? styles.topicChipActive : {}),
-              }}
-            >
-              {topic.charAt(0).toUpperCase() + topic.slice(1)}
-            </button>
-          ))}
-        </div>
+        {/* Topic Filter - only show in feed mode */}
+        {mode === 'feed' && (
+          <div style={styles.topicBar}>
+            {topics.map((topic) => (
+              <button
+                key={topic}
+                onClick={() => {
+                  setActiveTopic(topic);
+                  setVisibleCount(9);
+                }}
+                style={{
+                  ...styles.topicChip,
+                  ...(activeTopic === topic ? styles.topicChipActive : {}),
+                }}
+              >
+                {topic.charAt(0).toUpperCase() + topic.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Loading Skeletons */}
-        {loading && (
+        {/* Loading skeletons */}
+        {(loading || searching) && (
           <div style={styles.grid}>
             {[...Array(6)].map((_, i) => (
               <div key={i} style={styles.skeletonCard}>
@@ -175,27 +244,27 @@ const Feed = () => {
         )}
 
         {/* No results */}
-        {!loading && filtered.length === 0 && (
+        {!loading && !searching && displayArticles.length === 0 && (
           <div style={styles.empty}>
-            <div style={styles.emptyIcon}>
-              {search ? '🔍' : '📰'}
-            </div>
+            <div style={styles.emptyIcon}>{mode === 'search' ? '🔍' : '📰'}</div>
             <p style={styles.emptyText}>
-              {search ? `No results for "${search}"` : 'No articles found for this topic.'}
+              {mode === 'search'
+                ? `No results found for "${searchQuery}"`
+                : 'No articles found for this topic.'}
             </p>
-            {search && (
-              <button onClick={() => setSearch('')} style={styles.clearSearchBtn}>
-                Clear search
+            {mode === 'search' && (
+              <button onClick={handleClearSearch} style={styles.clearSearchBtn}>
+                Back to feed
               </button>
             )}
           </div>
         )}
 
         {/* Articles Grid */}
-        {!loading && visible.length > 0 && (
+        {!loading && !searching && displayArticles.length > 0 && (
           <>
             <div style={styles.grid}>
-              {visible.map((article, i) => (
+              {displayArticles.map((article, i) => (
                 <article
                   key={article.url + i}
                   style={{
@@ -223,7 +292,6 @@ const Feed = () => {
                       />
                     </div>
                   )}
-
                   <div style={styles.cardContent}>
                     <div style={styles.meta}>
                       <span style={styles.topicTag}>{article.topic}</span>
@@ -232,17 +300,14 @@ const Feed = () => {
                       <span style={styles.dot}>·</span>
                       <span style={styles.date}>{formatDate(article.publishedAt)}</span>
                     </div>
-
                     <a href={article.url} target="_blank" rel="noopener noreferrer">
                       <h2 style={styles.title}>{article.title}</h2>
                     </a>
-
                     {article.description && (
                       <p style={styles.description}>{article.description}</p>
                     )}
-
                     <div style={styles.cardFooter}>
-                      <a
+                      
                         href={article.url}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -267,8 +332,8 @@ const Feed = () => {
               ))}
             </div>
 
-            {/* Load More Button */}
-            {hasMore && (
+            {/* Load more - feed mode */}
+            {mode === 'feed' && hasMore && (
               <div style={styles.loadMoreWrapper}>
                 <button
                   onClick={() => setVisibleCount((prev) => prev + 9)}
@@ -281,6 +346,22 @@ const Feed = () => {
                 </p>
               </div>
             )}
+
+            {/* Load more - search mode */}
+            {mode === 'search' && searchResults.length < totalResults && (
+              <div style={styles.loadMoreWrapper}>
+                <button
+                  onClick={() => handleSearch(searchPage + 1)}
+                  style={styles.loadMoreBtn}
+                  disabled={searching}
+                >
+                  {searching ? 'Loading...' : 'Load more results'}
+                </button>
+                <p style={styles.loadMoreCount}>
+                  Showing {searchResults.length} of {totalResults.toLocaleString()}
+                </p>
+              </div>
+            )}
           </>
         )}
       </main>
@@ -289,255 +370,108 @@ const Feed = () => {
 };
 
 const styles: Record<string, any> = {
-  page: {
-    minHeight: '100vh',
-    backgroundColor: 'var(--bg-primary)',
-  },
-  main: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '48px 40px',
-  },
+  page: { minHeight: '100vh', backgroundColor: 'var(--bg-primary)' },
+  main: { maxWidth: '1200px', margin: '0 auto', padding: '48px 40px' },
   pageHeader: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: '32px',
-    gap: '24px',
-    flexWrap: 'wrap',
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+    marginBottom: '32px', gap: '24px', flexWrap: 'wrap',
     animation: 'fadeIn 0.5s ease forwards',
   },
   pageTitle: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '2.5rem',
-    fontWeight: 900,
-    color: 'var(--text-primary)',
-    marginBottom: '8px',
+    fontFamily: 'var(--font-display)', fontSize: '2.5rem', fontWeight: 900,
+    color: 'var(--text-primary)', marginBottom: '8px',
   },
-  pageSubtitle: {
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
-  },
-  searchWrapper: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    marginTop: '8px',
-  },
+  pageSubtitle: { fontSize: '0.9rem', color: 'var(--text-secondary)' },
+  searchWrapper: { position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' },
   searchIcon: {
-    position: 'absolute',
-    left: '14px',
-    color: 'var(--text-muted)',
-    fontSize: '1.1rem',
-    pointerEvents: 'none',
+    position: 'absolute', left: '14px', color: 'var(--text-muted)',
+    fontSize: '1.1rem', pointerEvents: 'none',
   },
   searchInput: {
-    backgroundColor: 'var(--bg-card)',
-    border: '1px solid var(--border-light)',
-    borderRadius: 'var(--radius)',
-    padding: '11px 40px 11px 40px',
-    fontSize: '0.9rem',
-    color: 'var(--text-primary)',
-    width: '280px',
-    fontFamily: 'var(--font-body)',
-    outline: 'none',
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)',
+    borderRadius: 'var(--radius)', padding: '11px 40px 11px 40px',
+    fontSize: '0.9rem', color: 'var(--text-primary)', width: '280px',
+    fontFamily: 'var(--font-body)', outline: 'none', transition: 'var(--transition)',
+  },
+  searchBtn: {
+    backgroundColor: 'var(--accent)', border: 'none', borderRadius: 'var(--radius)',
+    padding: '11px 16px', fontSize: '0.8rem', fontWeight: 600,
+    color: '#0a0a0a', cursor: 'pointer', fontFamily: 'var(--font-body)',
     transition: 'var(--transition)',
   },
   clearBtn: {
-    position: 'absolute',
-    right: '12px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
-    fontSize: '0.75rem',
-    padding: '2px',
+    backgroundColor: 'transparent', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: '0.78rem',
+    color: 'var(--text-muted)', cursor: 'pointer', whiteSpace: 'nowrap',
+    fontFamily: 'var(--font-body)',
   },
   topicBar: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-    marginBottom: '40px',
-    paddingBottom: '24px',
-    borderBottom: '1px solid var(--border)',
+    display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '40px',
+    paddingBottom: '24px', borderBottom: '1px solid var(--border)',
   },
   topicChip: {
-    backgroundColor: 'var(--bg-card)',
-    border: '1px solid var(--border)',
-    borderRadius: '100px',
-    padding: '6px 16px',
-    fontSize: '0.8rem',
-    fontWeight: 500,
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    transition: 'var(--transition)',
-    fontFamily: 'var(--font-body)',
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: '100px', padding: '6px 16px', fontSize: '0.8rem',
+    fontWeight: 500, color: 'var(--text-secondary)', cursor: 'pointer',
+    transition: 'var(--transition)', fontFamily: 'var(--font-body)',
   },
-  topicChipActive: {
-    backgroundColor: 'var(--accent)',
-    borderColor: 'var(--accent)',
-    color: '#0a0a0a',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-    gap: '24px',
-  },
+  topicChipActive: { backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: '#0a0a0a' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' },
   card: {
-    backgroundColor: 'var(--bg-card)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-lg)',
-    overflow: 'hidden',
-    transition: 'all 0.2s ease',
-    animation: 'fadeIn 0.5s ease forwards',
-    opacity: 0,
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+    transition: 'all 0.2s ease', animation: 'fadeIn 0.5s ease forwards', opacity: 0,
   },
-  imageWrapper: {
-    width: '100%',
-    height: '180px',
-    overflow: 'hidden',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  cardContent: {
-    padding: '20px',
-  },
-  meta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginBottom: '12px',
-    flexWrap: 'wrap',
-  },
-  topicTag: {
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    color: 'var(--accent)',
-  },
-  dot: {
-    color: 'var(--text-muted)',
-    fontSize: '0.7rem',
-  },
-  source: {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-  },
-  date: {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-  },
+  imageWrapper: { width: '100%', height: '180px', overflow: 'hidden' },
+  image: { width: '100%', height: '100%', objectFit: 'cover' },
+  cardContent: { padding: '20px' },
+  meta: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' },
+  topicTag: { fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' },
+  dot: { color: 'var(--text-muted)', fontSize: '0.7rem' },
+  source: { fontSize: '0.75rem', color: 'var(--text-muted)' },
+  date: { fontSize: '0.75rem', color: 'var(--text-muted)' },
   title: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    lineHeight: 1.4,
-    color: 'var(--text-primary)',
-    marginBottom: '10px',
-    display: 'block',
+    fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 700,
+    lineHeight: 1.4, color: 'var(--text-primary)', marginBottom: '10px', display: 'block',
   },
   description: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.6,
-    marginBottom: '16px',
-    display: '-webkit-box',
-    WebkitLineClamp: 3,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
+    fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6,
+    marginBottom: '16px', display: '-webkit-box', WebkitLineClamp: 3,
+    WebkitBoxOrient: 'vertical', overflow: 'hidden',
   },
   cardFooter: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: '16px',
-    borderTop: '1px solid var(--border)',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: '16px', borderTop: '1px solid var(--border)',
   },
-  readMore: {
-    fontSize: '0.8rem',
-    fontWeight: 500,
-    color: 'var(--accent)',
-    letterSpacing: '0.03em',
-  },
+  readMore: { fontSize: '0.8rem', fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.03em' },
   bookmarkBtn: {
-    backgroundColor: 'transparent',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius)',
-    padding: '4px 10px',
-    fontSize: '1rem',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
-    transition: 'var(--transition)',
+    backgroundColor: 'transparent', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', padding: '4px 10px', fontSize: '1rem',
+    color: 'var(--text-muted)', cursor: 'pointer', transition: 'var(--transition)',
   },
-  bookmarkBtnActive: {
-    color: 'var(--accent)',
-    borderColor: 'var(--accent)',
-    backgroundColor: 'var(--accent-dim)',
-  },
+  bookmarkBtnActive: { color: 'var(--accent)', borderColor: 'var(--accent)', backgroundColor: 'var(--accent-dim)' },
   skeletonCard: {
-    backgroundColor: 'var(--bg-card)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-lg)',
-    overflow: 'hidden',
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-lg)', overflow: 'hidden',
   },
-  skeletonImage: {
-    width: '100%',
-    height: '180px',
-  },
-  skeletonContent: {
-    padding: '20px',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '80px 0',
-    animation: 'fadeIn 0.5s ease forwards',
-  },
-  emptyIcon: {
-    fontSize: '2.5rem',
-    marginBottom: '16px',
-  },
-  emptyText: {
-    color: 'var(--text-muted)',
-    fontSize: '0.9rem',
-    marginBottom: '16px',
-  },
+  skeletonImage: { width: '100%', height: '180px' },
+  skeletonContent: { padding: '20px' },
+  empty: { textAlign: 'center', padding: '80px 0', animation: 'fadeIn 0.5s ease forwards' },
+  emptyIcon: { fontSize: '2.5rem', marginBottom: '16px' },
+  emptyText: { color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' },
   clearSearchBtn: {
-    backgroundColor: 'transparent',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius)',
-    padding: '8px 16px',
-    fontSize: '0.8rem',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    fontFamily: 'var(--font-body)',
+    backgroundColor: 'transparent', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', padding: '8px 16px', fontSize: '0.8rem',
+    color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'var(--font-body)',
   },
-  loadMoreWrapper: {
-    textAlign: 'center',
-    marginTop: '48px',
-    paddingTop: '32px',
-    borderTop: '1px solid var(--border)',
-  },
+  loadMoreWrapper: { textAlign: 'center', marginTop: '48px', paddingTop: '32px', borderTop: '1px solid var(--border)' },
   loadMoreBtn: {
-    backgroundColor: 'transparent',
-    border: '1px solid var(--accent)',
-    borderRadius: 'var(--radius)',
-    padding: '12px 32px',
-    fontSize: '0.85rem',
-    fontWeight: 500,
-    color: 'var(--accent)',
-    cursor: 'pointer',
-    fontFamily: 'var(--font-body)',
-    transition: 'var(--transition)',
-    marginBottom: '12px',
+    backgroundColor: 'transparent', border: '1px solid var(--accent)',
+    borderRadius: 'var(--radius)', padding: '12px 32px', fontSize: '0.85rem',
+    fontWeight: 500, color: 'var(--accent)', cursor: 'pointer',
+    fontFamily: 'var(--font-body)', transition: 'var(--transition)', marginBottom: '12px',
   },
-  loadMoreCount: {
-    fontSize: '0.8rem',
-    color: 'var(--text-muted)',
-  },
+  loadMoreCount: { fontSize: '0.8rem', color: 'var(--text-muted)' },
 };
 
 export default Feed;
