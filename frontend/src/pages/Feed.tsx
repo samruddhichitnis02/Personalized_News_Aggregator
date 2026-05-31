@@ -25,21 +25,25 @@ const Feed = () => {
   const [bookmarking, setBookmarking] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const loadData = async () => {
       try {
         const [feedRes, bookmarksRes] = await Promise.all([
           getFeed(),
           getBookmarks(),
         ]);
-        setArticles(feedRes.data.articles);
-        setBookmarks(bookmarksRes.data);
+        if (!cancelled) {
+          setArticles(feedRes.data.articles);
+          setBookmarks(bookmarksRes.data);
+        }
       } catch (err) {
         console.error('Failed to load feed', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     loadData();
+    return () => { cancelled = true; };
   }, []);
 
   const topics = ['all', ...Array.from(new Set(articles.map((a) => a.topic)))];
@@ -88,12 +92,11 @@ const Feed = () => {
   return (
     <div style={styles.page}>
       <Navbar />
-
       <main style={styles.main}>
         <div style={styles.pageHeader}>
           <h1 style={styles.pageTitle}>Your Feed</h1>
           <p style={styles.pageSubtitle}>
-            {articles.length} stories curated for you
+            {loading ? 'Loading stories...' : `${articles.length} stories curated for you`}
           </p>
         </div>
 
@@ -128,11 +131,17 @@ const Feed = () => {
           </div>
         )}
 
-        {!loading && (
+        {!loading && articles.length === 0 && (
+          <div style={styles.empty}>
+            <p style={styles.emptyText}>No articles found. Check your API key or try again later.</p>
+          </div>
+        )}
+
+        {!loading && articles.length > 0 && (
           <div style={styles.grid}>
             {filtered.map((article, i) => (
               <article
-                key={article.url}
+                key={article.url + i}
                 style={{
                   ...styles.card,
                   animationDelay: `${i * 0.05}s`,
@@ -203,7 +212,7 @@ const Feed = () => {
           </div>
         )}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && filtered.length === 0 && articles.length > 0 && (
           <div style={styles.empty}>
             <p style={styles.emptyText}>No articles found for this topic.</p>
           </div>
@@ -213,7 +222,7 @@ const Feed = () => {
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, any> = {
   page: {
     minHeight: '100vh',
     backgroundColor: 'var(--bg-primary)',
@@ -241,7 +250,7 @@ const styles: Record<string, React.CSSProperties> = {
   topicBar: {
     display: 'flex',
     gap: '8px',
-    flexWrap: 'wrap' as const,
+    flexWrap: 'wrap',
     marginBottom: '40px',
     paddingBottom: '24px',
     borderBottom: '1px solid var(--border)',
@@ -276,7 +285,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
     animation: 'fadeIn 0.5s ease forwards',
     opacity: 0,
-    cursor: 'default',
   },
   imageWrapper: {
     width: '100%',
@@ -297,13 +305,13 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     marginBottom: '12px',
-    flexWrap: 'wrap' as const,
+    flexWrap: 'wrap',
   },
   topicTag: {
     fontSize: '0.7rem',
     fontWeight: 600,
     letterSpacing: '0.1em',
-    textTransform: 'uppercase' as const,
+    textTransform: 'uppercase',
     color: 'var(--accent)',
   },
   dot: {
@@ -335,7 +343,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '16px',
     display: '-webkit-box',
     WebkitLineClamp: 3,
-    WebkitBoxOrient: 'vertical' as const,
+    WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
   },
   cardFooter: {

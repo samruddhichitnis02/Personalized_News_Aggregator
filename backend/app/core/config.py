@@ -9,12 +9,15 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    NEWS_API_KEY: str
-    GNEWS_API_KEY: str
+    """
+    Application configuration loaded from .env file.
+    All fields are required unless a default is provided.
+    """
+    DATABASE_URL: str           # MySQL connection string
+    SECRET_KEY: str             # JWT signing secret
+    ALGORITHM: str = "HS256"   # JWT algorithm
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # token expiry in minutes
+    GNEWS_API_KEY: str          # GNews API key for fetching articles
 
     class Config:
         env_file = ".env"

@@ -1,53 +1,72 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import TopicsModal from './TopicsModal';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const [showTopics, setShowTopics] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav style={styles.nav}>
-      <div style={styles.inner}>
-        {/* Logo */}
-        <Link to="/feed" style={styles.logo}>PULSE</Link>
+    <>
+      <nav style={styles.nav}>
+        <div style={styles.inner}>
+          {/* Logo */}
+          <Link to="/feed" style={styles.logo}>PULSE</Link>
 
-        {/* Nav Links */}
-        <div style={styles.links}>
-          <Link
-            to="/feed"
-            style={{
-              ...styles.link,
-              ...(isActive('/feed') ? styles.linkActive : {}),
-            }}
-          >
-            Feed
-          </Link>
-          <Link
-            to="/bookmarks"
-            style={{
-              ...styles.link,
-              ...(isActive('/bookmarks') ? styles.linkActive : {}),
-            }}
-          >
-            Bookmarks
-          </Link>
-        </div>
+          {/* Nav Links */}
+          <div style={styles.links}>
+            <Link
+              to="/feed"
+              style={{
+                ...styles.link,
+                ...(isActive('/feed') ? styles.linkActive : {}),
+              }}
+            >
+              Feed
+            </Link>
+            <Link
+              to="/bookmarks"
+              style={{
+                ...styles.link,
+                ...(isActive('/bookmarks') ? styles.linkActive : {}),
+              }}
+            >
+              Bookmarks
+            </Link>
+          </div>
 
-        {/* Right side */}
-        <div style={styles.right}>
-          <span style={styles.email}>{user?.email}</span>
-          <button onClick={logout} style={styles.logoutBtn}>
-            Sign out
-          </button>
+          {/* Right side */}
+          <div style={styles.right}>
+            <button
+              onClick={() => setShowTopics(true)}
+              style={styles.topicsBtn}
+            >
+              ⚙ Topics
+            </button>
+            <span style={styles.email}>{user?.email}</span>
+            <button onClick={logout} style={styles.logoutBtn}>
+              Sign out
+            </button>
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Topics Modal */}
+      {showTopics && (
+        <TopicsModal
+          currentTopics={user?.topics || []}
+          onClose={() => setShowTopics(false)}
+        />
+      )}
+    </>
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, any> = {
   nav: {
     position: 'sticky',
     top: 0,
@@ -94,7 +113,19 @@ const styles: Record<string, React.CSSProperties> = {
   right: {
     display: 'flex',
     alignItems: 'center',
-    gap: '20px',
+    gap: '16px',
+  },
+  topicsBtn: {
+    backgroundColor: 'var(--accent-dim)',
+    border: '1px solid var(--accent)',
+    borderRadius: 'var(--radius)',
+    padding: '7px 14px',
+    fontSize: '0.8rem',
+    color: 'var(--accent)',
+    cursor: 'pointer',
+    transition: 'var(--transition)',
+    fontFamily: 'var(--font-body)',
+    fontWeight: 500,
   },
   email: {
     fontSize: '0.8rem',

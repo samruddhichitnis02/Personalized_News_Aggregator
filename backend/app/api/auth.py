@@ -1,15 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import List
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token, decode_token
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-
+from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 # tells FastAPI where to find the token in incoming requests
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+class TopicsUpdate(BaseModel):
+    """Schema for updating user topics."""
+    topics: List[str]
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """
@@ -69,3 +74,21 @@ def me(current_user: User = Depends(get_current_user)):
     """
     current_user.topics = current_user.topics.split(",")
     return current_user
+
+@router.put("/topics")
+def update_topics(
+    data: TopicsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update the logged-in user's preferred news topics.
+    - Accepts a list of topic strings
+    - Stores as comma-separated string in DB
+    - Returns updated topics list
+    Protected endpoint - requires valid JWT token.
+    """
+    current_user.topics = ",".join(data.topics)  # convert list back to string for storage
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Topics updated", "topics": current_user.topics.split(",")}
