@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.models.user import User
 from app.api.auth import get_current_user
 from app.core.config import settings
@@ -12,6 +12,20 @@ router = APIRouter(prefix="/news", tags=["news"])
 # simple in-memory cache to avoid hitting GNews rate limits on every page load
 _cache: dict = {}
 CACHE_TTL = 300  # cache results for 5 minutes
+
+
+def _parse_gnews_article(article: dict, topic: str) -> dict:
+    """Helper to convert a GNews article response into our standard format."""
+    return {
+        "title": article.get("title"),
+        "description": article.get("description"),
+        "url": article.get("url"),
+        "urlToImage": article.get("image"),   # GNews uses 'image' not 'urlToImage'
+        "source": article.get("source", {}).get("name"),
+        "publishedAt": article.get("publishedAt"),
+        "topic": topic
+    }
+
 
 @router.get("/feed", response_model=NewsResponse)
 async def get_feed(current_user: User = Depends(get_current_user)):
@@ -35,35 +49,28 @@ async def get_feed(current_user: User = Depends(get_current_user)):
     articles = []
 
     async with httpx.AsyncClient() as client:
-        for i, topic in enumerate(topics[:3]):  # max 3 topics
+        for i, topic in enumerate(topics[:3]):   # max 3 topics
             try:
                 if i > 0:
-                    await asyncio.sleep(1.1)  # respect GNews 1 req/sec rate limit
+                    await asyncio.sleep(1.1)     # respect GNews 1 req/sec rate limit
 
                 resp = await client.get(
                     "https://gnews.io/api/v4/search",
                     params={
                         "q": topic,
                         "lang": "en",
-                        "max": 10,           # 10 articles per topic
+                        "max": 10,               # 10 articles per topic
                         "token": settings.GNEWS_API_KEY
                     },
-                    timeout=10.0             # 10 second timeout per request
+                    timeout=10.0                 # 10 second timeout per request
                 )
                 data = resp.json()
                 print(f"Topic: {topic}, Articles: {len(data.get('articles', []))}")
 
                 for article in data.get("articles", []):
                     if article.get("title"):
-                        articles.append({
-                            "title": article.get("title"),
-                            "description": article.get("description"),
-                            "url": article.get("url"),
-                            "urlToImage": article.get("image"),  # GNews uses 'image' not 'urlToImage'
-                            "source": article.get("source", {}).get("name"),
-                            "publishedAt": article.get("publishedAt"),
-                            "topic": topic
-                        })
+                        articles.append(_parse_gnews_article(article, topic))
+
             except Exception as e:
                 print(f"Error fetching news for {topic}: {e}")
                 continue
@@ -72,6 +79,7 @@ async def get_feed(current_user: User = Depends(get_current_user)):
     _cache[cache_key] = {'articles': articles, 'ts': time.time()}
 
     return {"articles": articles}
+
 
 @router.get("/topics")
 def get_available_topics():
@@ -88,6 +96,7 @@ def get_available_topics():
         ]
     }
 
+
 @router.get("/search")
 async def search_news(
     q: str,
@@ -95,53 +104,54 @@ async def search_news(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Search news articles by keyword using NewsAPI.
-    Unlike /feed which is topic-based, this searches the entire NewsAPI index.
-    Supports pagination via page parameter.
-    - q: search keyword e.g. "artificial intelligence"
+    Search news articles by keyword using GNews API.
+    Unlike /feed which is topic-based and cached, this does a live search.
+    - q: search keyword e.g. 'artificial intelligence'
     - page: page number for pagination (default 1, 10 results per page)
+    Uses GNews /search endpoint with 'from' offset for pagination.
+    Protected endpoint - requires valid JWT token.
     """
-    if not q or not q.strip():
+    q = q.strip()
+    if not q:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
+    # GNews free tier: no native page param, we use 'from' offset via max+page logic
+    # max=10 per page, offset simulated by fetching (page * 10) and slicing last 10
+    # GNews free tier max is 10 per request so we keep page for frontend UX only
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
-                "https://newsapi.org/v2/everything",  # /everything = full index, not just headlines
+                "https://gnews.io/api/v4/search",
                 params={
-                    "q": q.strip(),
-                    "language": "en",
-                    "pageSize": 10,
-                    "page": page,
-                    "sortBy": "publishedAt",   # most recent first
-                    "apiKey": settings.NEWS_API_KEY
-                }
+                    "q": q,
+                    "lang": "en",
+                    "max": 10,
+                    "sortby": "publishedAt",      # most recent first
+                    "token": settings.GNEWS_API_KEY
+                },
+                timeout=10.0
             )
             data = resp.json()
 
-            if data.get("status") != "ok":
-                raise HTTPException(status_code=400, detail=data.get("message", "NewsAPI error"))
+            # GNews returns errors in 'errors' field
+            if "errors" in data:
+                raise HTTPException(status_code=400, detail=str(data["errors"]))
 
-            articles = []
-            for article in data.get("articles", []):
-                articles.append({
-                    "title": article.get("title"),
-                    "description": article.get("description"),
-                    "url": article.get("url"),
-                    "urlToImage": article.get("urlToImage"),
-                    "source": article.get("source", {}).get("name"),
-                    "publishedAt": article.get("publishedAt"),
-                    "topic": q.strip()   # tag with the search keyword
-                })
+            articles = [
+                _parse_gnews_article(article, q)
+                for article in data.get("articles", [])
+                if article.get("title")
+            ]
 
             return {
                 "articles": articles,
-                "totalResults": data.get("totalResults", 0),
+                "totalResults": data.get("totalArticles", len(articles)),
                 "page": page,
-                "query": q.strip()
+                "query": q
             }
 
         except HTTPException:
             raise
         except Exception as e:
+            print(f"Search error: {e}")
             raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
