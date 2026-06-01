@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getFeed, addBookmark, getBookmarks, deleteBookmark, searchNews } from '../services/api';
+import { getFeed, addBookmark, getBookmarks, deleteBookmark, searchNews, getCountries, updatePreferences } from '../services/api';
 import Navbar from '../components/Navbar';
 
 interface Article {
@@ -17,14 +17,22 @@ interface Bookmark {
   article_url: string;
 }
 
+interface Country {
+  code: string;
+  name: string;
+}
+
 type SearchMode = 'feed' | 'search';
 
 const Feed = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [searchResults, setSearchResults] = useState<Article[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>('us');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [countryLoading, setCountryLoading] = useState(false);
   const [activeTopic, setActiveTopic] = useState('all');
   const [bookmarking, setBookmarking] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -40,13 +48,15 @@ const Feed = () => {
     let cancelled = false;
     const loadData = async () => {
       try {
-        const [feedRes, bookmarksRes] = await Promise.all([
+        const [feedRes, bookmarksRes, countriesRes] = await Promise.all([
           getFeed(),
           getBookmarks(),
+          getCountries(),
         ]);
         if (!cancelled) {
           setArticles(feedRes.data.articles);
           setBookmarks(bookmarksRes.data);
+          setCountries(countriesRes.data.countries);
         }
       } catch (err) {
         console.error('Failed to load feed', err);
@@ -57,6 +67,27 @@ const Feed = () => {
     loadData();
     return () => { cancelled = true; };
   }, []);
+
+  const handleCountryChange = async (countryCode: string) => {
+    setSelectedCountry(countryCode);
+    setCountryLoading(true);
+    setActiveTopic('all');
+    setVisibleCount(9);
+    try {
+      // get current topics from articles
+      const currentTopics = [...new Set(articles.map((a) => a.topic))];
+      const topics = currentTopics.length > 0 ? currentTopics : ['technology', 'science'];
+      // save preference to backend
+      await updatePreferences(topics, countryCode);
+      // refetch feed with new country
+      const feedRes = await getFeed();
+      setArticles(feedRes.data.articles);
+    } catch (err) {
+      console.error('Country change failed', err);
+    } finally {
+      setCountryLoading(false);
+    }
+  };
 
   const topics = ['all', ...Array.from(new Set(articles.map((a) => a.topic)))];
   const filtered = articles
@@ -140,6 +171,8 @@ const Feed = () => {
   };
 
   const displayArticles = mode === 'search' ? searchResults : visible;
+
+  const selectedCountryName = countries.find((c) => c.code === selectedCountry)?.name || 'United States';
 
   const renderCard = (article: Article, i: number) => (
     <article
@@ -232,20 +265,44 @@ const Feed = () => {
         </div>
 
         {mode === 'feed' && (
-          <div style={styles.topicBar}>
-            {topics.map((topic) => (
-              <button
-                key={topic}
-                onClick={() => { setActiveTopic(topic); setVisibleCount(9); }}
-                style={{ ...styles.topicChip, ...(activeTopic === topic ? styles.topicChipActive : {}) }}
+          <div style={styles.filtersRow}>
+            <div style={styles.topicBar}>
+              {topics.map((topic) => (
+                <button
+                  key={topic}
+                  onClick={() => { setActiveTopic(topic); setVisibleCount(9); }}
+                  style={{ ...styles.topicChip, ...(activeTopic === topic ? styles.topicChipActive : {}) }}
+                >
+                  {topic.charAt(0).toUpperCase() + topic.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <div style={styles.countryWrapper}>
+              <span style={styles.countryLabel}>
+                {countryLoading ? '⏳' : '🌍'} Region
+              </span>
+              <select
+                value={selectedCountry}
+                onChange={(e) => handleCountryChange(e.target.value)}
+                style={styles.countrySelect}
+                disabled={countryLoading}
               >
-                {topic.charAt(0).toUpperCase() + topic.slice(1)}
-              </button>
-            ))}
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </select>
+              {!countryLoading && (
+                <span style={styles.countryIndicator}>{selectedCountryName}</span>
+              )}
+              {countryLoading && (
+                <span style={styles.countryIndicator}>Updating feed...</span>
+              )}
+            </div>
           </div>
         )}
 
-        {(loading || searching) && (
+        {(loading || searching || countryLoading) && (
           <div style={styles.grid}>
             {[...Array(6)].map((_, i) => (
               <div key={i} style={styles.skeletonCard}>
@@ -261,11 +318,13 @@ const Feed = () => {
           </div>
         )}
 
-        {!loading && !searching && displayArticles.length === 0 && (
+        {!loading && !searching && !countryLoading && displayArticles.length === 0 && (
           <div style={styles.empty}>
             <div style={styles.emptyIcon}>{mode === 'search' ? '🔍' : '📰'}</div>
             <p style={styles.emptyText}>
-              {mode === 'search' ? `No results found for "${searchQuery}"` : 'No articles found.'}
+              {mode === 'search'
+                ? `No results found for "${searchQuery}"`
+                : `No articles found for ${selectedCountryName}. Try a different region.`}
             </p>
             {mode === 'search' && (
               <button onClick={handleClearSearch} style={styles.clearSearchBtn}>Back to feed</button>
@@ -273,7 +332,7 @@ const Feed = () => {
           </div>
         )}
 
-        {!loading && !searching && displayArticles.length > 0 && (
+        {!loading && !searching && !countryLoading && displayArticles.length > 0 && (
           <div>
             <div style={styles.grid}>
               {displayArticles.map((article, i) => renderCard(article, i))}
@@ -336,13 +395,27 @@ const styles: Record<string, any> = {
     padding: '8px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', cursor: 'pointer',
     whiteSpace: 'nowrap', fontFamily: 'var(--font-body)',
   },
-  topicBar: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '40px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' },
+  filtersRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    flexWrap: 'wrap', gap: '16px', marginBottom: '40px',
+    paddingBottom: '24px', borderBottom: '1px solid var(--border)',
+  },
+  topicBar: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   topicChip: {
     backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '100px',
     padding: '6px 16px', fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)',
     cursor: 'pointer', transition: 'var(--transition)', fontFamily: 'var(--font-body)',
   },
   topicChipActive: { backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: '#0a0a0a' },
+  countryWrapper: { display: 'flex', alignItems: 'center', gap: '10px' },
+  countryLabel: { fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 },
+  countrySelect: {
+    backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', padding: '6px 12px', fontSize: '0.8rem',
+    color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'var(--font-body)',
+    outline: 'none',
+  },
+  countryIndicator: { fontSize: '0.75rem', color: 'var(--text-muted)' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' },
   card: {
     backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',

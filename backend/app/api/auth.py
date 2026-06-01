@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token, decode_token
 from fastapi.security import OAuth2PasswordBearer
+from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut, UserUpdate
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 # tells FastAPI where to find the token in incoming requests
@@ -92,3 +93,22 @@ def update_topics(
     db.commit()
     db.refresh(current_user)
     return {"message": "Topics updated", "topics": current_user.topics.split(",")}
+
+
+@router.put("/preferences", response_model=UserOut)
+def update_preferences(
+    data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update user's topic and country preferences.
+    Converts topics list to comma-separated string for MySQL storage.
+    Protected endpoint - requires valid JWT token.
+    """
+    current_user.topics = ",".join(data.topics)
+    current_user.country = data.country
+    db.commit()
+    db.refresh(current_user)
+    current_user.topics = current_user.topics.split(",")
+    return current_user

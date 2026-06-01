@@ -2,26 +2,33 @@ from pydantic import BaseModel, EmailStr
 from typing import List
 
 class UserRegister(BaseModel):
-    """Schema for user registration request - validates incoming signup data."""
-    email: EmailStr          # validates it's a proper email format
-    password: str            # plain text, will be hashed before storing
-    topics: List[str] = ["technology", "science"]  # default topics if none provided
+    """Schema for user registration request."""
+    email: EmailStr
+    password: str
+    topics: List[str] = ["technology", "science"]
+    country: str = "us"
 
 class UserLogin(BaseModel):
     """Schema for user login request."""
     email: EmailStr
-    password: str            # will be verified against hashed version in DB
+    password: str
 
 class TokenResponse(BaseModel):
-    """Schema for login/register response - returns JWT token to frontend."""
-    access_token: str        # JWT token frontend stores and sends with every request
-    token_type: str = "bearer"  # standard OAuth2 token type
+    """Schema for login/register response - returns JWT token."""
+    access_token: str
+    token_type: str = "bearer"
 
 class UserOut(BaseModel):
     """Schema for returning user data - never exposes password."""
     id: int
     email: str
-    topics: List[str]        # returned as list, converted from comma-separated string
+    topics: List[str]
+    country: str
 
     class Config:
-        from_attributes = True  # allows converting SQLAlchemy model to this schema
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    """Schema for updating user preferences."""
+    topics: List[str]
+    country: str = "us"

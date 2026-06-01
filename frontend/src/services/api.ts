@@ -18,17 +18,25 @@ api.interceptors.request.use((config) => {
 });
 
 // auth endpoints
-export const register = (email: string, password: string, topics: string[]) =>
-  api.post('/auth/register', { email, password, topics });
+export const register = (email: string, password: string, topics: string[], country: string) =>
+  api.post('/auth/register', { email, password, topics, country });
 
 export const login = (email: string, password: string) =>
   api.post('/auth/login', { email, password });
 
 export const getMe = () => api.get('/auth/me');
 
+export const updatePreferences = (topics: string[], country: string) =>
+  api.put('/auth/preferences', { topics, country });
+
 // news endpoints
 export const getFeed = () => api.get('/news/feed');
 export const getTopics = () => api.get('/news/topics');
+export const getCountries = () => api.get('/news/countries');
+
+// search endpoints
+export const searchNews = (q: string, page: number = 1) =>
+  api.get(`/news/search?q=${encodeURIComponent(q)}&page=${page}`);
 
 // bookmark endpoints
 export const getBookmarks = () => api.get('/bookmarks/');
@@ -36,7 +44,3 @@ export const addBookmark = (data: object) => api.post('/bookmarks/', data);
 export const deleteBookmark = (id: number) => api.delete(`/bookmarks/${id}`);
 
 export default api;
-
-// search endpoints
-export const searchNews = (q: string, page: number = 1) =>
-  api.get(`/news/search?q=${encodeURIComponent(q)}&page=${page}`);

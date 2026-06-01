@@ -13,6 +13,40 @@ router = APIRouter(prefix="/news", tags=["news"])
 _cache: dict = {}
 CACHE_TTL = 300  # cache results for 5 minutes
 
+# all GNews supported countries
+SUPPORTED_COUNTRIES = [
+    {"code": "au", "name": "Australia"},
+    {"code": "br", "name": "Brazil"},
+    {"code": "ca", "name": "Canada"},
+    {"code": "cn", "name": "China"},
+    {"code": "eg", "name": "Egypt"},
+    {"code": "fr", "name": "France"},
+    {"code": "de", "name": "Germany"},
+    {"code": "gr", "name": "Greece"},
+    {"code": "hk", "name": "Hong Kong"},
+    {"code": "in", "name": "India"},
+    {"code": "ie", "name": "Ireland"},
+    {"code": "il", "name": "Israel"},
+    {"code": "it", "name": "Italy"},
+    {"code": "jp", "name": "Japan"},
+    {"code": "nl", "name": "Netherlands"},
+    {"code": "no", "name": "Norway"},
+    {"code": "pk", "name": "Pakistan"},
+    {"code": "pe", "name": "Peru"},
+    {"code": "ph", "name": "Philippines"},
+    {"code": "pt", "name": "Portugal"},
+    {"code": "ro", "name": "Romania"},
+    {"code": "ru", "name": "Russia"},
+    {"code": "sg", "name": "Singapore"},
+    {"code": "es", "name": "Spain"},
+    {"code": "se", "name": "Sweden"},
+    {"code": "ch", "name": "Switzerland"},
+    {"code": "tw", "name": "Taiwan"},
+    {"code": "ua", "name": "Ukraine"},
+    {"code": "gb", "name": "United Kingdom"},
+    {"code": "us", "name": "United States"},
+]
+
 
 def _parse_gnews_article(article: dict, topic: str) -> dict:
     """Helper to convert a GNews article response into our standard format."""
@@ -20,27 +54,38 @@ def _parse_gnews_article(article: dict, topic: str) -> dict:
         "title": article.get("title"),
         "description": article.get("description"),
         "url": article.get("url"),
-        "urlToImage": article.get("image"),   # GNews uses 'image' not 'urlToImage'
+        "urlToImage": article.get("image"),
         "source": article.get("source", {}).get("name"),
         "publishedAt": article.get("publishedAt"),
         "topic": topic
     }
 
 
+@router.get("/countries")
+def get_supported_countries():
+    """
+    Returns all GNews supported countries with their codes.
+    Used in frontend country selector on feed page.
+    No auth required - public endpoint.
+    """
+    return {"countries": SUPPORTED_COUNTRIES}
+
+
 @router.get("/feed", response_model=NewsResponse)
 async def get_feed(current_user: User = Depends(get_current_user)):
     """
     Returns personalized news feed for the logged-in user.
-    - Reads user's topics from DB
+    - Reads user's topics and country from DB
     - Checks cache first to avoid redundant API calls
-    - Fetches from GNews with 1.1s delay between topics (free tier rate limit)
+    - Fetches from GNews filtered by user's country
     - Caches results for 5 minutes per user
     Protected endpoint - requires valid JWT token.
     """
     topics = current_user.topics.split(",")
+    country = current_user.country or "us"
 
-    # check cache first
-    cache_key = f"{current_user.id}_{current_user.topics}"
+    # include country in cache key so changing country busts cache
+    cache_key = f"{current_user.id}_{current_user.topics}_{country}"
     cached = _cache.get(cache_key)
     if cached and time.time() - cached['ts'] < CACHE_TTL:
         print(f"Cache hit for user {current_user.id}")
@@ -49,23 +94,24 @@ async def get_feed(current_user: User = Depends(get_current_user)):
     articles = []
 
     async with httpx.AsyncClient() as client:
-        for i, topic in enumerate(topics[:3]):   # max 3 topics
+        for i, topic in enumerate(topics[:3]):
             try:
                 if i > 0:
-                    await asyncio.sleep(1.1)     # respect GNews 1 req/sec rate limit
+                    await asyncio.sleep(1.1)
 
                 resp = await client.get(
                     "https://gnews.io/api/v4/search",
                     params={
                         "q": topic,
                         "lang": "en",
-                        "max": 10,               # 10 articles per topic
+                        "country": country,       # filter by user's selected country
+                        "max": 10,
                         "token": settings.GNEWS_API_KEY
                     },
-                    timeout=10.0                 # 10 second timeout per request
+                    timeout=10.0
                 )
                 data = resp.json()
-                print(f"Topic: {topic}, Articles: {len(data.get('articles', []))}")
+                print(f"Topic: {topic}, Country: {country}, Articles: {len(data.get('articles', []))}")
 
                 for article in data.get("articles", []):
                     if article.get("title"):
@@ -75,9 +121,7 @@ async def get_feed(current_user: User = Depends(get_current_user)):
                 print(f"Error fetching news for {topic}: {e}")
                 continue
 
-    # store in cache
     _cache[cache_key] = {'articles': articles, 'ts': time.time()}
-
     return {"articles": articles}
 
 
@@ -86,7 +130,6 @@ def get_available_topics():
     """
     Returns list of all available topics users can choose from.
     Used in frontend onboarding and settings page.
-    No auth required - public endpoint.
     """
     return {
         "topics": [
@@ -108,16 +151,12 @@ async def search_news(
     Unlike /feed which is topic-based and cached, this does a live search.
     - q: search keyword e.g. 'artificial intelligence'
     - page: page number for pagination (default 1, 10 results per page)
-    Uses GNews /search endpoint with 'from' offset for pagination.
     Protected endpoint - requires valid JWT token.
     """
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    # GNews free tier: no native page param, we use 'from' offset via max+page logic
-    # max=10 per page, offset simulated by fetching (page * 10) and slicing last 10
-    # GNews free tier max is 10 per request so we keep page for frontend UX only
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(
@@ -126,14 +165,13 @@ async def search_news(
                     "q": q,
                     "lang": "en",
                     "max": 10,
-                    "sortby": "publishedAt",      # most recent first
+                    "sortby": "publishedAt",
                     "token": settings.GNEWS_API_KEY
                 },
                 timeout=10.0
             )
             data = resp.json()
 
-            # GNews returns errors in 'errors' field
             if "errors" in data:
                 raise HTTPException(status_code=400, detail=str(data["errors"]))
 
