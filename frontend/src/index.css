@@ -7,31 +7,30 @@
 }
 
 :root {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-card: #161616;
-  --bg-hover: #1e1e1e;
+  --bg-primary: #080808;
+  --bg-secondary: #0f0f0f;
+  --bg-card: #111111;
+  --bg-hover: #1a1a1a;
   --accent: #f5a623;
   --accent-hover: #e8971a;
-  --accent-dim: rgba(245, 166, 35, 0.12);
+  --accent-dim: rgba(245, 166, 35, 0.10);
+  --accent-glow: rgba(245, 166, 35, 0.25);
   --text-primary: #f0ece4;
   --text-secondary: #8a8580;
   --text-muted: #4a4744;
-  --border: #222222;
+  --border: #1e1e1e;
   --border-light: #2a2a2a;
   --font-display: 'Playfair Display', Georgia, serif;
   --font-body: 'DM Sans', sans-serif;
   --radius: 4px;
-  --radius-lg: 8px;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.6);
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.7);
   --transition: all 0.2s ease;
 }
 
-html {
-  font-size: 16px;
-  scroll-behavior: smooth;
-}
+html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
   background-color: var(--bg-primary);
@@ -42,63 +41,141 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; border: none; outline: none; font-family: var(--font-body); }
+input { font-family: var(--font-body); outline: none; }
 
-button {
-  cursor: pointer;
-  border: none;
-  outline: none;
-  font-family: var(--font-body);
-}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-input {
-  font-family: var(--font-body);
-  outline: none;
+/* ---- Keyframes ---- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
-/* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-
-@keyframes fadeInLeft {
-  from { opacity: 0; transform: translateX(-24px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -400% 0; }
+  100% { background-position: 400% 0; }
+}
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes tickerScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes imageZoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.05); }
 }
 
-.animate-in {
-  animation: fadeIn 0.5s ease forwards;
-}
-
+/* ---- Skeleton ---- */
 .skeleton {
-  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  background: linear-gradient(90deg,
+    var(--bg-card) 20%,
+    var(--bg-hover) 50%,
+    var(--bg-card) 80%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.8s infinite linear;
   border-radius: var(--radius);
+}
+
+/* ---- Card reveal ---- */
+.card-enter {
+  animation: cardReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
+}
+
+/* ---- Ticker ---- */
+.ticker-track {
+  display: flex;
+  gap: 0;
+  animation: tickerScroll 28s linear infinite;
+  white-space: nowrap;
+}
+.ticker-track:hover { animation-play-state: paused; }
+
+/* ---- Featured card image zoom ---- */
+.featured-img { transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.featured-card:hover .featured-img { transform: scale(1.04); }
+
+/* ---- Focus ring ---- */
+input:focus, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Topic chip hover ---- */
+.topic-chip { transition: all 0.18s ease; }
+.topic-chip:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+/* ---- Read more underline ---- */
+.read-more-link {
+  position: relative;
+  display: inline-block;
+}
+.read-more-link::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.read-more-link:hover::after { width: 100%; }
+
+/* ---- Card image overlay ---- */
+.card-img-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(8,8,8,0.7) 0%, transparent 60%);
+  transition: opacity 0.3s ease;
+}
+
+/* ---- Spinner ---- */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ---- Live dot ---- */
+.live-dot {
+  width: 7px; height: 7px;
+  background: #ff4444;
+  border-radius: 50%;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* ---- Noise overlay ---- */
+.noise-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px;
+  z-index: 9999;
 }
