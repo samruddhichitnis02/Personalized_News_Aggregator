@@ -16,8 +16,9 @@ interface Article {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const readingTime = (text: string): string => {
-  const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
+const readingTime = (article: { title?: string; description?: string }): string => {
+  const text = [(article.title || ''), (article.description || '')].join(' ');
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
   const mins = Math.max(1, Math.round(words / 200));
   return `${mins} min read`;
 };
@@ -40,25 +41,34 @@ const Toast = () => {
   if (!msg) return null;
   return (
     <div style={{
-      position: 'fixed', bottom: '32px', left: '50%',
-      transform: `translateX(-50%) translateY(${visible ? '0' : '12px'})`,
+      position: 'fixed', bottom: '88px', left: '50%',
+      transform: `translateX(-50%) translateY(${visible ? '0' : '16px'})`,
       opacity: visible ? 1 : 0,
-      transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
-      backgroundColor: '#1e1e1e', border: '1px solid #333',
-      borderRadius: '8px', padding: '10px 18px',
-      fontSize: '0.82rem', color: 'var(--text-primary)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-      display: 'flex', alignItems: 'center', gap: '8px',
+      transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
+      backgroundColor: '#1a1a1a',
+      border: '1px solid rgba(245,166,35,0.3)',
+      borderRadius: '100px', padding: '10px 20px',
+      fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-primary)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(245,166,35,0.1)',
+      display: 'flex', alignItems: 'center', gap: '10px',
       zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap',
     }}>
-      <span style={{ color: 'var(--accent)', fontSize: '0.9rem' }}>✓</span>
+      <span style={{
+        width: '20px', height: '20px', borderRadius: '50%',
+        backgroundColor: 'var(--accent)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#080808" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </span>
       {msg}
     </div>
   );
 };
 
 // ── Share button ──────────────────────────────────────────────────────────────
-const ShareButton = ({ url, title }: { url: string; title: string }) => {
+const ShareButton = ({ url, title, compact = false }: { url: string; title: string; compact?: boolean }) => {
   const [copied, setCopied] = useState(false);
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -69,7 +79,7 @@ const ShareButton = ({ url, title }: { url: string; title: string }) => {
       } else {
         await navigator.clipboard.writeText(url);
         setCopied(true);
-        showToast('Link copied to clipboard');
+        showToast('Link copied to clipboard!');
         setTimeout(() => setCopied(false), 2000);
       }
     } catch {}
@@ -77,30 +87,50 @@ const ShareButton = ({ url, title }: { url: string; title: string }) => {
   return (
     <button
       onClick={handleShare}
-      title="Share article"
+      title="Copy link"
       style={{
-        backgroundColor: 'transparent',
-        border: '1px solid var(--border-light)',
-        borderRadius: '5px', padding: '4px 8px',
-        fontSize: '0.78rem', color: copied ? 'var(--accent)' : 'var(--text-muted)',
+        backgroundColor: copied ? 'rgba(245,166,35,0.12)' : 'transparent',
+        border: `1px solid ${copied ? 'rgba(245,166,35,0.4)' : 'var(--border-light)'}`,
+        borderRadius: '5px',
+        padding: compact ? '4px 8px' : '5px 11px',
+        fontSize: '0.74rem', fontWeight: 500,
+        color: copied ? 'var(--accent)' : 'var(--text-muted)',
         cursor: 'pointer', transition: 'all 0.18s ease',
-        display: 'flex', alignItems: 'center', gap: '4px',
+        display: 'flex', alignItems: 'center',
+        gap: compact ? '3px' : '5px',
+        fontFamily: 'var(--font-body)',
       }}
       onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.35)';
-        (e.currentTarget as HTMLElement).style.color = 'var(--accent)';
+        if (!copied) {
+          (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.35)';
+          (e.currentTarget as HTMLElement).style.color = 'var(--accent)';
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(245,166,35,0.06)';
+        }
       }}
       onMouseLeave={e => {
         if (!copied) {
           (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
           (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
         }
       }}
     >
-      {copied
-        ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-      }
+      {copied ? (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          {!compact && 'Copied!'}
+        </>
+      ) : (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+          {!compact && 'Share'}
+        </>
+      )}
     </button>
   );
 };
@@ -294,7 +324,7 @@ const FeaturedCard = ({
             Read full story →
           </a>
           <span style={{ fontSize: '0.75rem', color: 'rgba(240,236,228,0.45)' }}>
-            {readingTime((article.title || '') + ' ' + (article.description || ''))}
+            {readingTime(article)}
           </span>
           <ShareButton url={article.url} title={article.title} />
           <button
@@ -387,10 +417,21 @@ const ArticleCard = ({
             </span>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{article.source}</span>
           <span style={{ color: 'var(--border-light)', fontSize: '0.65rem' }}>·</span>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{formatDate(article.publishedAt)}</span>
+          <span style={{ color: 'var(--border-light)', fontSize: '0.65rem' }}>·</span>
+          <span style={{
+            fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.03em',
+            color: '#f5a623',
+            backgroundColor: 'rgba(245,166,35,0.15)',
+            border: '1px solid rgba(245,166,35,0.45)',
+            padding: '2px 8px', borderRadius: '100px',
+            boxShadow: '0 0 6px rgba(245,166,35,0.12)',
+          }}>
+            {readingTime(article)}
+          </span>
         </div>
         <a href={article.url} target="_blank" rel="noopener noreferrer">
           <h3 style={{
@@ -417,19 +458,13 @@ const ArticleCard = ({
           paddingTop: '13px', borderTop: '1px solid var(--border)',
           marginTop: 'auto', gap: '8px',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-            <a
-              href={article.url} target="_blank" rel="noopener noreferrer"
-              className="read-more-link"
-              style={{ fontSize: '0.76rem', fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.03em', flexShrink: 0 }}
-            >
-              Read story
-            </a>
-            <span style={{ color: 'var(--border-light)', fontSize: '0.65rem' }}>·</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-              {readingTime((article.title || '') + ' ' + (article.description || ''))}
-            </span>
-          </div>
+          <a
+            href={article.url} target="_blank" rel="noopener noreferrer"
+            className="read-more-link"
+            style={{ fontSize: '0.76rem', fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.03em' }}
+          >
+            Read story
+          </a>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
             <ShareButton url={article.url} title={article.title} />
             <button
@@ -499,7 +534,7 @@ const ArticleRow = ({
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
           <span style={{
             color: 'var(--accent)', fontSize: '0.6rem',
             fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -508,6 +543,16 @@ const ArticleRow = ({
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{article.source}</span>
           <span style={{ color: 'var(--border-light)' }}>·</span>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{formatDate(article.publishedAt)}</span>
+          <span style={{
+            fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.03em',
+            color: '#f5a623',
+            backgroundColor: 'rgba(245,166,35,0.15)',
+            border: '1px solid rgba(245,166,35,0.45)',
+            padding: '2px 8px', borderRadius: '100px',
+            boxShadow: '0 0 6px rgba(245,166,35,0.12)',
+          }}>
+            {readingTime(article)}
+          </span>
         </div>
         <a href={article.url} target="_blank" rel="noopener noreferrer">
           <h3 style={{
@@ -529,11 +574,8 @@ const ArticleRow = ({
           className="read-more-link"
           style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--accent)' }}
         >Read →</a>
-        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-          {readingTime((article.title || '') + ' ' + (article.description || ''))}
-        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <ShareButton url={article.url} title={article.title} />
+          <ShareButton url={article.url} title={article.title} compact />
           <button onClick={onBookmark} disabled={bookmarking}
             style={{
               backgroundColor: 'transparent', border: 'none', padding: '2px 4px',
