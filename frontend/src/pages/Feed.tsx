@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  getFeed, addBookmark, getBookmarks, deleteBookmark,
+  getFeed, getMe, addBookmark, getBookmarks, deleteBookmark,
   searchNews, getCountries, updatePreferences,
 } from '../services/api';
 import Navbar from '../components/Navbar';
@@ -473,10 +473,34 @@ const Feed = () => {
     setVisibleCount(9);
     setCountryOpen(false);
     try {
-      const topics = [...new Set(articles.map(a => a.topic))];
-      await updatePreferences(topics.length > 0 ? topics : ['technology'], code);
-      const res = await getFeed();
-      setArticles(res.data.articles);
+      // Fetch the user's actual saved topic preferences from DB instead of
+      // deriving them from article labels (which can differ, e.g. "Electric Vehicles"
+      // vs "technology"). This ensures updatePreferences saves the right strings.
+      const meRes = await getMe();
+      const userTopics: string[] = Array.isArray(meRes.data.topics)
+        ? meRes.data.topics
+        : (meRes.data.topics as string).split(',');
+      const safeTopics = userTopics.filter(Boolean).length > 0 ? userTopics : ['technology'];
+
+      // Save country to DB (topics stay unchanged)
+      await updatePreferences(safeTopics, code);
+
+      // Fetch fresh feed — the new country busts the 5-min cache key on the backend
+      const feedRes = await getFeed();
+      setArticles(feedRes.data.articles);
+
+      // If user is in search mode, re-run the last search so results
+      // also reflect the newly selected country
+      if (mode === 'search' && searchQuery.trim()) {
+        setSearching(true);
+        try {
+          const sRes = await searchNews(searchQuery, 1);
+          setSearchResults(sRes.data.articles);
+          setTotalResults(sRes.data.totalResults);
+          setSearchPage(1);
+        } catch (se) { console.error(se); }
+        finally { setSearching(false); }
+      }
     } catch (e) { console.error(e); }
     finally { setCountryLoading(false); }
   };
@@ -660,49 +684,47 @@ const Feed = () => {
               </button>
             )}
 
-            {/* View toggle */}
-            {mode === 'feed' && (
-              <div style={{
-                display: 'flex', border: '1px solid var(--border)',
-                borderRadius: '7px', overflow: 'hidden',
-              }}>
-                {(['grid', 'list'] as ViewMode[]).map(v => (
-                  <button key={v} onClick={() => setViewMode(v)} style={{
-                    padding: '7px 11px',
-                    backgroundColor: viewMode === v ? 'var(--bg-hover)' : 'var(--bg-card)',
-                    border: 'none', cursor: 'pointer', transition: 'background 0.15s',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {v === 'grid' ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                        stroke={viewMode === v ? 'var(--accent)' : 'var(--text-muted)'}
-                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                      </svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                        stroke={viewMode === v ? 'var(--accent)' : 'var(--text-muted)'}
-                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
-                        <line x1="3" y1="18" x2="21" y2="18"/>
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* View toggle — always visible */}
+            <div style={{
+              display: 'flex', border: '1px solid var(--border)',
+              borderRadius: '7px', overflow: 'hidden',
+            }}>
+              {(['grid', 'list'] as ViewMode[]).map(v => (
+                <button key={v} onClick={() => setViewMode(v)} style={{
+                  padding: '7px 11px',
+                  backgroundColor: viewMode === v ? 'var(--bg-hover)' : 'var(--bg-card)',
+                  border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {v === 'grid' ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={viewMode === v ? 'var(--accent)' : 'var(--text-muted)'}
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                      <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke={viewMode === v ? 'var(--accent)' : 'var(--text-muted)'}
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
+                      <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* ── Filter row ── */}
-        {mode === 'feed' && (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            flexWrap: 'wrap', gap: '12px', marginBottom: '32px',
-            paddingBottom: '20px', borderBottom: '1px solid var(--border)',
-          }}>
-            {/* Topic chips */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '12px', marginBottom: '32px',
+          paddingBottom: '20px', borderBottom: '1px solid var(--border)',
+        }}>
+          {/* Topic chips — feed only; in search mode show a label instead */}
+          {mode === 'feed' ? (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {topics.map(topic => (
                 <button
@@ -722,6 +744,23 @@ const Feed = () => {
                 </button>
               ))}
             </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                fontSize: '0.72rem', color: 'var(--text-muted)',
+                letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600,
+              }}>
+                Search results
+              </span>
+              <span style={{
+                backgroundColor: 'var(--accent-dim)', border: '1px solid rgba(245,166,35,0.25)',
+                borderRadius: '100px', padding: '3px 10px',
+                fontSize: '0.72rem', color: 'var(--accent)', fontWeight: 600,
+              }}>
+                {totalResults.toLocaleString()} articles
+              </span>
+            </div>
+          )}
 
             {/* Country custom dropdown */}
             <div style={{ position: 'relative' }}>
@@ -783,8 +822,7 @@ const Feed = () => {
                 </div>
               )}
             </div>
-          </div>
-        )}
+        </div>
 
         {/* ── Loading ── */}
         {isLoading && (

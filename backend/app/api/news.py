@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.models.user import User
-from app.api.auth import get_current_user
+from app.api.deps import get_current_user
+from app.api import cache as feed_cache
 from app.core.config import settings
 from app.schemas.news import NewsResponse
 import httpx
@@ -8,10 +9,6 @@ import asyncio
 import time
 
 router = APIRouter(prefix="/news", tags=["news"])
-
-# simple in-memory cache to avoid hitting GNews rate limits on every page load
-_cache: dict = {}
-CACHE_TTL = 300  # cache results for 5 minutes
 
 # all GNews supported countries
 SUPPORTED_COUNTRIES = [
@@ -86,10 +83,10 @@ async def get_feed(current_user: User = Depends(get_current_user)):
 
     # include country in cache key so changing country busts cache
     cache_key = f"{current_user.id}_{current_user.topics}_{country}"
-    cached = _cache.get(cache_key)
-    if cached and time.time() - cached['ts'] < CACHE_TTL:
+    cached = feed_cache.get(cache_key)
+    if cached is not None:
         print(f"Cache hit for user {current_user.id}")
-        return {"articles": cached['articles']}
+        return {"articles": cached}
 
     articles = []
 
@@ -121,7 +118,7 @@ async def get_feed(current_user: User = Depends(get_current_user)):
                 print(f"Error fetching news for {topic}: {e}")
                 continue
 
-    _cache[cache_key] = {'articles': articles, 'ts': time.time()}
+    feed_cache.set(cache_key, articles)
     return {"articles": articles}
 
 

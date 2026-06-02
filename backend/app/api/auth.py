@@ -3,35 +3,21 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 from app.db.database import get_db
+from app.api.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token, decode_token
-from fastapi.security import OAuth2PasswordBearer
 from app.schemas.user import UserRegister, UserLogin, TokenResponse, UserOut, UserUpdate
+from app.api import cache as feed_cache
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 # tells FastAPI where to find the token in incoming requests
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class TopicsUpdate(BaseModel):
     """Schema for updating user topics."""
     topics: List[str]
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """
-    Dependency - extracts and validates JWT token from request.
-    Used in protected endpoints to get the logged-in user.
-    Any endpoint that needs auth just adds: current_user = Depends(get_current_user)
-    """
-    try:
-        payload = decode_token(token)
-        user_id = payload.get("sub")
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+# get_current_user is defined in deps.py to avoid circular imports
 
 @router.post("/register", response_model=TokenResponse)
 def register(data: UserRegister, db: Session = Depends(get_db)):
@@ -110,5 +96,8 @@ def update_preferences(
     current_user.country = data.country
     db.commit()
     db.refresh(current_user)
+    # Bust the in-memory feed cache so the next /news/feed call
+    # fetches fresh articles from GNews with the updated preferences
+    feed_cache.invalidate_user(current_user.id)
     current_user.topics = current_user.topics.split(",")
     return current_user
