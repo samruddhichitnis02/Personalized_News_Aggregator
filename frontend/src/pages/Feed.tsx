@@ -14,6 +14,135 @@ interface Article {
   publishedAt: string;
   topic: string;
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const readingTime = (text: string): string => {
+  const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
+  const mins = Math.max(1, Math.round(words / 200));
+  return `${mins} min read`;
+};
+
+// Toast state lives at module level so any component can trigger it
+let _setToast: ((msg: string) => void) | null = null;
+const showToast = (msg: string) => _setToast && _setToast(msg);
+
+// ── Toast component ───────────────────────────────────────────────────────────
+const Toast = () => {
+  const [msg, setMsg] = useState('');
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { _setToast = setMsg; }, []);
+  useEffect(() => {
+    if (!msg) return;
+    setVisible(true);
+    const t = setTimeout(() => { setVisible(false); setTimeout(() => setMsg(''), 300); }, 2200);
+    return () => clearTimeout(t);
+  }, [msg]);
+  if (!msg) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: '32px', left: '50%',
+      transform: `translateX(-50%) translateY(${visible ? '0' : '12px'})`,
+      opacity: visible ? 1 : 0,
+      transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
+      backgroundColor: '#1e1e1e', border: '1px solid #333',
+      borderRadius: '8px', padding: '10px 18px',
+      fontSize: '0.82rem', color: 'var(--text-primary)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', gap: '8px',
+      zIndex: 9999, pointerEvents: 'none', whiteSpace: 'nowrap',
+    }}>
+      <span style={{ color: 'var(--accent)', fontSize: '0.9rem' }}>✓</span>
+      {msg}
+    </div>
+  );
+};
+
+// ── Share button ──────────────────────────────────────────────────────────────
+const ShareButton = ({ url, title }: { url: string; title: string }) => {
+  const [copied, setCopied] = useState(false);
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        showToast('Link copied to clipboard');
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {}
+  };
+  return (
+    <button
+      onClick={handleShare}
+      title="Share article"
+      style={{
+        backgroundColor: 'transparent',
+        border: '1px solid var(--border-light)',
+        borderRadius: '5px', padding: '4px 8px',
+        fontSize: '0.78rem', color: copied ? 'var(--accent)' : 'var(--text-muted)',
+        cursor: 'pointer', transition: 'all 0.18s ease',
+        display: 'flex', alignItems: 'center', gap: '4px',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.35)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--accent)';
+      }}
+      onMouseLeave={e => {
+        if (!copied) {
+          (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+        }
+      }}
+    >
+      {copied
+        ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      }
+    </button>
+  );
+};
+
+// ── Back to top button ────────────────────────────────────────────────────────
+const BackToTop = () => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 600);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  if (!visible) return null;
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      title="Back to top"
+      style={{
+        position: 'fixed', bottom: '32px', right: '32px',
+        width: '42px', height: '42px', borderRadius: '50%',
+        backgroundColor: 'var(--accent)', border: 'none',
+        color: '#080808', cursor: 'pointer', zIndex: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 4px 20px rgba(245,166,35,0.35)',
+        animation: 'fadeUp 0.25s ease forwards',
+        transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(245,166,35,0.5)';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(245,166,35,0.35)';
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="18 15 12 9 6 15"/>
+      </svg>
+    </button>
+  );
+};
 interface Bookmark { id: number; article_url: string; }
 interface Country { code: string; name: string; }
 type SearchMode = 'feed' | 'search';
@@ -164,6 +293,10 @@ const FeaturedCard = ({
           >
             Read full story →
           </a>
+          <span style={{ fontSize: '0.75rem', color: 'rgba(240,236,228,0.45)' }}>
+            {readingTime((article.title || '') + ' ' + (article.description || ''))}
+          </span>
+          <ShareButton url={article.url} title={article.title} />
           <button
             onClick={onBookmark}
             disabled={bookmarking}
@@ -282,36 +415,45 @@ const ArticleCard = ({
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           paddingTop: '13px', borderTop: '1px solid var(--border)',
-          marginTop: 'auto',
+          marginTop: 'auto', gap: '8px',
         }}>
-          <a
-            href={article.url} target="_blank" rel="noopener noreferrer"
-            className="read-more-link"
-            style={{ fontSize: '0.76rem', fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.03em' }}
-          >
-            Read story
-          </a>
-          <button
-            onClick={onBookmark}
-            disabled={bookmarking}
-            style={{
-              backgroundColor: isBookmarked ? 'var(--accent-dim)' : 'transparent',
-              border: `1px solid ${isBookmarked ? 'rgba(245,166,35,0.35)' : 'var(--border-light)'}`,
-              borderRadius: '5px', padding: '4px 10px',
-              fontSize: '0.88rem',
-              color: isBookmarked ? 'var(--accent)' : 'var(--text-muted)',
-              cursor: 'pointer', transition: 'all 0.18s ease',
-            }}
-            onMouseEnter={e => {
-              if (!isBookmarked) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.35)';
-            }}
-            onMouseLeave={e => {
-              if (!isBookmarked) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
-            }}
-            title={isBookmarked ? 'Remove bookmark' : 'Save article'}
-          >
-            {bookmarking ? '…' : isBookmarked ? '★' : '☆'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <a
+              href={article.url} target="_blank" rel="noopener noreferrer"
+              className="read-more-link"
+              style={{ fontSize: '0.76rem', fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.03em', flexShrink: 0 }}
+            >
+              Read story
+            </a>
+            <span style={{ color: 'var(--border-light)', fontSize: '0.65rem' }}>·</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+              {readingTime((article.title || '') + ' ' + (article.description || ''))}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+            <ShareButton url={article.url} title={article.title} />
+            <button
+              onClick={onBookmark}
+              disabled={bookmarking}
+              style={{
+                backgroundColor: isBookmarked ? 'var(--accent-dim)' : 'transparent',
+                border: `1px solid ${isBookmarked ? 'rgba(245,166,35,0.35)' : 'var(--border-light)'}`,
+                borderRadius: '5px', padding: '4px 10px',
+                fontSize: '0.88rem',
+                color: isBookmarked ? 'var(--accent)' : 'var(--text-muted)',
+                cursor: 'pointer', transition: 'all 0.18s ease',
+              }}
+              onMouseEnter={e => {
+                if (!isBookmarked) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.35)';
+              }}
+              onMouseLeave={e => {
+                if (!isBookmarked) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
+              }}
+              title={isBookmarked ? 'Remove bookmark' : 'Save article'}
+            >
+              {bookmarking ? '…' : isBookmarked ? '★' : '☆'}
+            </button>
+          </div>
         </div>
       </div>
     </article>
@@ -387,13 +529,19 @@ const ArticleRow = ({
           className="read-more-link"
           style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--accent)' }}
         >Read →</a>
-        <button onClick={onBookmark} disabled={bookmarking}
-          style={{
-            backgroundColor: 'transparent', border: 'none', padding: '2px 4px',
-            fontSize: '0.9rem', color: isBookmarked ? 'var(--accent)' : 'var(--text-muted)',
-            cursor: 'pointer', transition: 'color 0.15s',
-          }}
-        >{bookmarking ? '…' : isBookmarked ? '★' : '☆'}</button>
+        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+          {readingTime((article.title || '') + ' ' + (article.description || ''))}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <ShareButton url={article.url} title={article.title} />
+          <button onClick={onBookmark} disabled={bookmarking}
+            style={{
+              backgroundColor: 'transparent', border: 'none', padding: '2px 4px',
+              fontSize: '0.9rem', color: isBookmarked ? 'var(--accent)' : 'var(--text-muted)',
+              cursor: 'pointer', transition: 'color 0.15s',
+            }}
+          >{bookmarking ? '…' : isBookmarked ? '★' : '☆'}</button>
+        </div>
       </div>
     </article>
   );
@@ -954,6 +1102,9 @@ const Feed = () => {
       {countryOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setCountryOpen(false)} />
       )}
+
+      <BackToTop />
+      <Toast />
     </div>
   );
 };
