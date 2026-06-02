@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import TopicsModal from './TopicsModal';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showTopics, setShowTopics] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -18,9 +19,13 @@ const Navbar = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  const initials = user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : '??';
+  const handleSignOut = () => {
+    setUserMenuOpen(false);
+    logout();
+    navigate('/login');
+  };
+
+  const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : '??';
 
   return (
     <>
@@ -45,8 +50,7 @@ const Navbar = () => {
           }}>
             <span style={{
               width: '7px', height: '7px', borderRadius: '50%',
-              backgroundColor: 'var(--accent)',
-              display: 'inline-block',
+              backgroundColor: 'var(--accent)', display: 'inline-block',
               boxShadow: '0 0 8px var(--accent-glow)',
             }} />
             PULSE
@@ -56,14 +60,11 @@ const Navbar = () => {
           <div style={{ display: 'flex', gap: '4px' }}>
             {[{ to: '/feed', label: 'Feed' }, { to: '/bookmarks', label: 'Bookmarks' }].map(({ to, label }) => (
               <Link key={to} to={to} style={{
-                fontSize: '0.82rem', fontWeight: 500,
-                letterSpacing: '0.04em',
+                fontSize: '0.82rem', fontWeight: 500, letterSpacing: '0.04em',
                 color: isActive(to) ? 'var(--text-primary)' : 'var(--text-secondary)',
-                textDecoration: 'none',
-                padding: '6px 14px', borderRadius: '6px',
+                textDecoration: 'none', padding: '6px 14px', borderRadius: '6px',
                 backgroundColor: isActive(to) ? 'var(--bg-hover)' : 'transparent',
-                transition: 'all 0.18s ease',
-                position: 'relative',
+                transition: 'all 0.18s ease', position: 'relative',
               }}
               onMouseEnter={e => { if (!isActive(to)) (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; }}
               onMouseLeave={e => { if (!isActive(to)) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
@@ -72,8 +73,7 @@ const Navbar = () => {
                 {isActive(to) && (
                   <span style={{
                     position: 'absolute', bottom: '2px', left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '16px', height: '2px',
+                    transform: 'translateX(-50%)', width: '16px', height: '2px',
                     backgroundColor: 'var(--accent)', borderRadius: '1px',
                   }} />
                 )}
@@ -81,7 +81,7 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* Right */}
+          {/* Right side */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               onClick={() => setShowTopics(true)}
@@ -103,75 +103,75 @@ const Navbar = () => {
               Topics
             </button>
 
-            {/* Avatar dropdown */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setUserMenuOpen(o => !o)}
-                style={{
-                  width: '32px', height: '32px', borderRadius: '50%',
-                  backgroundColor: 'var(--accent-dim)',
-                  border: '1.5px solid rgba(245,166,35,0.4)',
-                  color: 'var(--accent)', fontSize: '0.7rem',
-                  fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 0.18s ease', fontFamily: 'var(--font-body)',
-                  letterSpacing: '0.05em',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(245,166,35,0.4)'; }}
-              >
-                {initials}
-              </button>
-
-              {userMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                  backgroundColor: '#161616', border: '1px solid #2a2a2a',
-                  borderRadius: '10px', minWidth: '200px', padding: '6px',
-                  boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-                  animation: 'fadeUp 0.18s ease forwards',
-                  zIndex: 200,
-                }}>
-                  <div style={{ padding: '10px 12px 12px', borderBottom: '1px solid #222' }}>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Signed in as</p>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 500 }}>{user?.email}</p>
-                  </div>
-                  <button
-                    onClick={() => { setUserMenuOpen(false); logout(); }}
-                    style={{
-                      width: '100%', textAlign: 'left',
-                      backgroundColor: 'transparent', border: 'none',
-                      padding: '9px 12px', fontSize: '0.82rem',
-                      color: 'var(--text-secondary)', cursor: 'pointer',
-                      borderRadius: '6px', marginTop: '4px',
-                      transition: 'all 0.15s ease', display: 'flex', alignItems: 'center', gap: '8px',
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)';
-                      (e.currentTarget as HTMLElement).style.color = '#ff6b6b';
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                      (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Avatar button — dropdown is rendered outside nav below */}
+            <button
+              onClick={() => setUserMenuOpen(o => !o)}
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%',
+                backgroundColor: 'var(--accent-dim)',
+                border: `1.5px solid ${userMenuOpen ? 'var(--accent)' : 'rgba(245,166,35,0.4)'}`,
+                color: 'var(--accent)', fontSize: '0.7rem', fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', transition: 'all 0.18s ease',
+                fontFamily: 'var(--font-body)', letterSpacing: '0.05em',
+              }}
+            >
+              {initials}
+            </button>
           </div>
         </div>
       </nav>
 
+      {/* ── Dropdown + backdrop rendered OUTSIDE <nav> to escape its stacking context ── */}
       {userMenuOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 199 }}
-          onClick={() => setUserMenuOpen(false)}
-        />
+        <>
+          {/* Invisible backdrop catches outside clicks */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 399 }}
+            onClick={() => setUserMenuOpen(false)}
+          />
+          {/* Dropdown menu — above backdrop */}
+          <div style={{
+            position: 'fixed', top: '68px', right: '40px',
+            backgroundColor: '#161616', border: '1px solid #2a2a2a',
+            borderRadius: '10px', minWidth: '210px', padding: '6px',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
+            animation: 'fadeUp 0.18s ease forwards',
+            zIndex: 400,
+          }}>
+            <div style={{ padding: '10px 12px 12px', borderBottom: '1px solid #222' }}>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Signed in as</p>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 500 }}>{user?.email}</p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              style={{
+                width: '100%', textAlign: 'left',
+                backgroundColor: 'transparent', border: 'none',
+                padding: '9px 12px', fontSize: '0.82rem',
+                color: 'var(--text-secondary)', cursor: 'pointer',
+                borderRadius: '6px', marginTop: '4px',
+                transition: 'all 0.15s ease', display: 'flex', alignItems: 'center', gap: '8px',
+                fontFamily: 'var(--font-body)',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)';
+                (e.currentTarget as HTMLElement).style.color = '#ff6b6b';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Sign out
+            </button>
+          </div>
+        </>
       )}
 
       {showTopics && (
