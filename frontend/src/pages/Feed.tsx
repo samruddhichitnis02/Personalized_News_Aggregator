@@ -617,6 +617,56 @@ const SkeletonCard = ({ view }: { view: ViewMode }) =>
     </div>
   );
 
+// ── Keyboard shortcuts modal ──────────────────────────────────────────────────
+const ShortcutsModal = ({ onClose }: { onClose: () => void }) => (
+  <>
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+      backdropFilter: 'blur(4px)', zIndex: 600,
+    }} />
+    <div style={{
+      position: 'fixed', top: '50%', left: '50%',
+      transform: 'translate(-50%, -50%)',
+      backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)',
+      borderRadius: '14px', padding: '28px 32px', zIndex: 601,
+      minWidth: '340px', boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+      animation: 'fadeUp 0.2s ease forwards',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+          Keyboard shortcuts
+        </h3>
+        <button onClick={onClose} style={{
+          backgroundColor: 'transparent', border: 'none',
+          color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', lineHeight: 1,
+        }}>✕</button>
+      </div>
+      {[
+        { key: '/',   desc: 'Focus search bar' },
+        { key: 'T',   desc: 'Toggle dark / light mode' },
+        { key: 'Esc', desc: 'Clear search / close panel' },
+        { key: '?',   desc: 'Show this shortcuts panel' },
+      ].map(({ key, desc }) => (
+        <div key={key} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 0', borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{desc}</span>
+          <kbd style={{
+            backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border-light)',
+            borderRadius: '5px', padding: '3px 9px',
+            fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)',
+            fontFamily: 'var(--font-body)', minWidth: '36px', textAlign: 'center',
+          }}>{key}</kbd>
+        </div>
+      ))}
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '14px', textAlign: 'center' }}>
+        Press <kbd style={{ backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: '4px', padding: '1px 6px', fontSize: '0.7rem' }}>?</kbd> anytime to open this
+      </p>
+    </div>
+  </>
+);
+
 // ── Main Feed ─────────────────────────────────────────────────────────────────
 const Feed = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -644,12 +694,49 @@ const Feed = () => {
   const [readFilter, setReadFilter] = useState<'all' | 'quick' | 'deep'>('all');
   const searchRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('pulse-search-history') || '[]'); }
+    catch { return []; }
+  });
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Apply theme to <html> element
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('pulse-theme', theme);
   }, [theme]);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA';
+
+      // / → focus search bar
+      if (e.key === '/' && !isTyping) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      // Escape → clear search / close suggestions
+      if (e.key === 'Escape') {
+        if (showSuggestions) { setShowSuggestions(false); return; }
+        if (mode === 'search') { handleClearSearch(); return; }
+        searchRef.current?.blur();
+        return;
+      }
+      if (isTyping) return;
+      // t → cycle theme
+      if (e.key === 't') { setTheme(th => th === 'dark' ? 'light' : 'dark'); return; }
+      // ? → show shortcuts modal
+      if (e.key === '?') { setShowShortcuts(s => !s); return; }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [mode, showSuggestions]);
 
   // Infinite scroll — re-create observer whenever articles/visibleCount changes
   // so the sentinel is always being watched after new cards render
@@ -750,9 +837,22 @@ const Feed = () => {
   const hasMore = visibleCount + 1 < filtered.length;
   const hasMoreSearch = searchResults.length < totalResults;
 
-  const handleSearch = useCallback(async (page = 1) => {
-    const q = searchInput.trim();
+  const saveToHistory = (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setSearchHistory(prev => {
+      const updated = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 5);
+      localStorage.setItem('pulse-search-history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleSearch = useCallback(async (page = 1, query?: string) => {
+    const q = (query ?? searchInput).trim();
     if (!q) return;
+    setShowSuggestions(false);
+    setSearchInput(q);
+    saveToHistory(q);
     setSearching(true);
     setMode('search');
     setSearchQuery(q);
@@ -766,6 +866,15 @@ const Feed = () => {
     finally { setSearching(false); }
   }, [searchInput]);
 
+  const removeFromHistory = (item: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSearchHistory(prev => {
+      const updated = prev.filter(h => h !== item);
+      localStorage.setItem('pulse-search-history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const handleClearSearch = () => {
     setMode('feed');
     setSearchInput('');
@@ -774,6 +883,7 @@ const Feed = () => {
     setSearchQuery('');
     setSearchPage(1);
     setTotalResults(0);
+    setShowSuggestions(false);
   };
 
   const isBookmarked = (url: string) => bookmarks.some(b => b.article_url === url);
@@ -867,10 +977,31 @@ const Feed = () => {
                 : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               }
             </button>
-            <div style={{ position: 'relative' }}>
+            {/* Keyboard shortcuts hint button */}
+            <button
+              onClick={() => setShowShortcuts(s => !s)}
+              title="Keyboard shortcuts (?)"
+              style={{
+                width: '36px', height: '36px', borderRadius: '8px',
+                backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                color: 'var(--text-secondary)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.8rem', fontWeight: 700, flexShrink: 0,
+                transition: 'all 0.18s ease', fontFamily: 'var(--font-body)',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--accent)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-light)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
+              }}
+            >?</button>
+            <div ref={searchBoxRef} style={{ position: 'relative' }}>
               <svg style={{
                 position: 'absolute', left: '12px', top: '50%',
-                transform: 'translateY(-50%)', pointerEvents: 'none',
+                transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1,
               }} width="14" height="14" viewBox="0 0 24 24" fill="none"
                 stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -878,27 +1009,49 @@ const Feed = () => {
               <input
                 ref={searchRef}
                 type="text"
-                placeholder="Search any topic…"
+                placeholder="Search any topic… (press /)"
                 value={searchInput}
                 onChange={e => {
                   setSearchInput(e.target.value);
                   if (mode === 'feed') setFeedSearch(e.target.value);
+                  setFocusedIndex(-1);
                 }}
-                onKeyDown={e => { if (e.key === 'Enter') handleSearch(1); }}
-                style={{
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '8px', padding: '9px 36px 9px 36px',
-                  fontSize: '0.85rem', color: 'var(--text-primary)', width: '260px',
-                  transition: 'border-color 0.18s, box-shadow 0.18s',
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (focusedIndex >= 0 && searchHistory[focusedIndex]) {
+                      handleSearch(1, searchHistory[focusedIndex]);
+                    } else {
+                      handleSearch(1);
+                    }
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedIndex(i => Math.min(i + 1, searchHistory.length - 1));
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedIndex(i => Math.max(i - 1, -1));
+                  }
+                  if (e.key === 'Escape') {
+                    setShowSuggestions(false);
+                    searchRef.current?.blur();
+                  }
                 }}
                 onFocus={e => {
                   e.currentTarget.style.borderColor = 'rgba(245,166,35,0.45)';
                   e.currentTarget.style.boxShadow = '0 0 0 3px rgba(245,166,35,0.08)';
+                  if (searchHistory.length > 0) setShowSuggestions(true);
                 }}
-                onBlur={e => {
-                  e.currentTarget.style.borderColor = 'var(--border-light)';
-                  e.currentTarget.style.boxShadow = 'none';
+                onBlur={() => {
+                  setTimeout(() => setShowSuggestions(false), 150);
+                }}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: showSuggestions && searchHistory.length > 0 ? '8px 8px 0 0' : '8px',
+                  padding: '9px 36px 9px 36px',
+                  fontSize: '0.85rem', color: 'var(--text-primary)', width: '280px',
+                  transition: 'border-color 0.18s, box-shadow 0.18s',
                 }}
               />
               {searchInput && (
@@ -908,8 +1061,74 @@ const Feed = () => {
                     position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
                     backgroundColor: 'transparent', border: 'none', padding: '2px',
                     color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer', lineHeight: 1,
+                    zIndex: 1,
                   }}
                 >✕</button>
+              )}
+
+              {/* Search history dropdown */}
+              {showSuggestions && searchHistory.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid rgba(245,166,35,0.35)',
+                  borderTop: 'none', borderRadius: '0 0 8px 8px',
+                  zIndex: 500, overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}>
+                  <div style={{
+                    padding: '6px 12px 4px',
+                    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
+                    color: 'var(--text-muted)', textTransform: 'uppercase',
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                    Recent searches
+                  </div>
+                  {searchHistory.map((item, i) => (
+                    <div
+                      key={item}
+                      onMouseDown={() => handleSearch(1, item)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '8px 12px', cursor: 'pointer',
+                        backgroundColor: focusedIndex === i ? 'var(--bg-hover)' : 'transparent',
+                        transition: 'background 0.12s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)'; }}
+                      onMouseLeave={e => { if (focusedIndex !== i) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                        stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="12 8 12 12 14 14"/>
+                        <path d="M3.05 11a9 9 0 1 0 .5-4"/>
+                        <polyline points="3 3 3 7 7 7"/>
+                      </svg>
+                      <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{item}</span>
+                      <button
+                        onMouseDown={e => removeFromHistory(item, e)}
+                        style={{
+                          backgroundColor: 'transparent', border: 'none',
+                          color: 'var(--text-muted)', cursor: 'pointer',
+                          fontSize: '0.7rem', padding: '2px 4px', lineHeight: 1,
+                          borderRadius: '3px',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ff6b6b'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; }}
+                        title="Remove"
+                      >✕</button>
+                    </div>
+                  ))}
+                  <div style={{
+                    padding: '6px 12px',
+                    fontSize: '0.68rem', color: 'var(--text-muted)',
+                    borderTop: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                  }}>
+                    <span>↑↓ navigate</span>
+                    <span>↵ search</span>
+                    <span>Esc close</span>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1249,6 +1468,7 @@ const Feed = () => {
 
       <BackToTop />
       <Toast />
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 };
